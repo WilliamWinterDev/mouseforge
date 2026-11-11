@@ -67,6 +67,22 @@ The output is `src-tauri/target/release/mouseforge.exe`. If linking fails with `
 
 Global input hooks are the standard Windows way to remap input, but some anti-cheat systems dislike them. If a game complains, quit MouseForge from the tray while you play it; DPI and the side panel's F13–F24 stay set on the mouse.
 
+## Coming soon
+
+Planned, roughly in order. No promises on dates.
+
+- [ ] **RGB lighting:** colours for the three zones, a reactive click colour, rainbow mode, and the default effect at power-on. The commands are already known from rivalcfg.
+- [ ] **More DPI control**
+  - an on-screen DPI indicator when you switch presets
+  - follow the mouse's own DPI button, so the app always shows the active preset
+  - a DPI preview/test area on the DPI tab
+- [ ] **Power settings:** sleep timer and lighting dim timer.
+- [ ] **Remap the DPI button:** needs the rest of the button table decoded (see [docs/PROTOCOL.md](docs/PROTOCOL.md)).
+- [ ] **Releases:** prebuilt downloads and an installer on GitHub Releases, so you don't need to build from source.
+- [ ] **Testing in wired (USB cable) mode** and on the WOW Edition.
+
+Ideas and USB captures for other features are welcome. Open an issue.
+
 ## Credits
 
 - [rivalcfg](https://github.com/flozz/rivalcfg) by Fabien Loison (WTFPL): DPI table and the DPI, polling, battery and save commands.
