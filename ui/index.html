@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MouseForge</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="icon.png" alt="" width="28" height="28"><span>MouseForge</span></div>
+  <div class="pills">
+    <div class="pill" id="pill-device"><span class="dot"></span><span id="device-text">Looking for mouse…</span></div>
+    <div class="pill" id="pill-battery" title="Battery">
+      <span class="batt"><span class="batt-fill" id="batt-fill"></span></span><span id="battery-text">--</span>
+    </div>
+    <div class="pill" title="Live DPI"><span class="muted">DPI</span><strong id="dpi-text">--</strong></div>
+    <div class="pill" title="Focused app"><span class="muted">Profile</span><strong id="profile-text">Default</strong><span class="muted" id="fg-text"></span></div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="buttons" class="active">Buttons &amp; profiles</button>
+  <button role="tab" data-tab="dpi">DPI</button>
+  <button role="tab" data-tab="battery">Battery</button>
+  <button role="tab" data-tab="setup">Setup</button>
+  <span class="save-state" id="save-state"></span>
+</nav>
+
+<main>
+  <!-- BUTTONS -->
+  <section class="tab-panel active" id="tab-buttons">
+    <div class="split">
+      <aside class="card profiles">
+        <div class="card-head"><h2>Profiles</h2><button class="btn small" id="add-profile">+ New</button></div>
+        <ul id="profile-list"></ul>
+        <p class="hint">A profile switches on automatically when one of its apps is focused. Buttons you don't set in a profile keep their Default-profile action.</p>
+      </aside>
+      <div class="stack">
+        <div class="card">
+          <div class="row gap">
+            <label class="field grow"><span>Profile name</span><input id="profile-name" type="text"></label>
+            <button class="btn danger" id="delete-profile">Delete profile</button>
+          </div>
+          <div id="apps-block">
+            <span class="label">Activates in</span>
+            <div class="chips" id="app-chips"></div>
+            <div class="row gap">
+              <select id="app-picker"><option value="">Pick a running app…</option></select>
+              <input id="app-manual" type="text" placeholder="or type e.g. cs2.exe">
+              <button class="btn" id="app-add">Add</button>
+              <button class="btn ghost" id="app-refresh" title="Refresh running apps">↻</button>
+            </div>
+          </div>
+          <label class="check" id="dpi-override-row"><input type="checkbox" id="dpi-override"> Use its own DPI presets (edit them on the DPI tab while this profile is selected)</label>
+        </div>
+
+        <div class="card">
+          <h2>Buttons</h2>
+          <div class="mouse-layout">
+            <div>
+              <span class="label">Top</span>
+              <div class="trigger-col" id="main-triggers"></div>
+            </div>
+            <div>
+              <span class="label">Side panel (12 buttons)</span>
+              <div class="side-grid" id="side-triggers"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="editor">
+          <h2 id="editor-title">Select a button</h2>
+          <div id="editor-body" class="muted">Click a button above to change what it does.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DPI -->
+  <section class="tab-panel" id="tab-dpi">
+    <div class="card">
+      <div class="card-head">
+        <h2>DPI presets <span class="muted" id="dpi-scope"></span></h2>
+        <button class="btn small" id="dpi-add">+ Add preset</button>
+      </div>
+      <p class="hint">Up to 5 presets from 100 to 18,000 DPI. The DPI button on the mouse and any "Next / previous DPI" bindings cycle through them. Click a preset's dot to make it active.</p>
+      <div id="dpi-list"></div>
+    </div>
+    <div class="card">
+      <h2>Polling rate</h2>
+      <div class="seg" id="polling"></div>
+    </div>
+    <div class="card">
+      <h2>Mouse memory</h2>
+      <p class="hint">MouseForge applies your DPI whenever it's running. To keep these settings when the app isn't running (or on another PC), save them to the mouse.</p>
+      <button class="btn" id="save-mouse">Save to mouse memory</button>
+    </div>
+  </section>
+
+  <!-- BATTERY -->
+  <section class="tab-panel" id="tab-battery">
+    <div class="card battery-hero">
+      <div class="big-batt"><div class="big-batt-fill" id="big-batt-fill"></div></div>
+      <div>
+        <div class="big-num" id="big-batt-text">--</div>
+        <div class="muted" id="big-batt-sub">Waiting for the mouse…</div>
+      </div>
+      <button class="btn ghost" id="batt-refresh">Check now</button>
+    </div>
+    <div class="card">
+      <h2>Notifications</h2>
+      <span class="label">Warn me when the battery reaches</span>
+      <div class="chips" id="warn-chips"></div>
+      <div class="row gap">
+        <input id="warn-new" type="number" min="5" max="95" step="5" placeholder="e.g. 30">
+        <button class="btn" id="warn-add">Add level</button>
+      </div>
+      <label class="check"><input type="checkbox" id="notify-full"> Tell me when it's fully charged</label>
+      <label class="field inline"><span>Check the battery every</span>
+        <select id="poll-secs"><option value="30">30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option><option value="900">15 minutes</option></select>
+      </label>
+      <button class="btn ghost" id="test-notify">Send a test notification</button>
+    </div>
+  </section>
+
+  <!-- SETUP -->
+  <section class="tab-panel" id="tab-setup">
+    <div class="card">
+      <h2>General</h2>
+      <label class="check"><input type="checkbox" id="autostart"> Start MouseForge with Windows (minimised to the tray)</label>
+      <p class="hint">Closing this window keeps MouseForge running in the tray. Use the tray icon's menu to quit.</p>
+    </div>
+    <div class="card">
+      <h2>One-time side panel setup</h2>
+      <p>The Aerox 9's 12 side buttons send the number keys <kbd>1</kbd>–<kbd>=</kbd> out of the box. Windows can't tell those apart from your keyboard, so for remapping, the side panel needs to send <kbd>F13</kbd>–<kbd>F24</kbd>, which no normal keyboard has. This is saved in the mouse itself, so you only do it once.</p>
+      <div class="row gap">
+        <button class="btn primary" id="side-fkeys">Set side panel to F13–F24</button>
+        <button class="btn ghost" id="side-numbers">Restore number keys</button>
+      </div>
+      <p class="hint" style="margin-top:10px">Side buttons you don't remap send F13–F24, which most apps ignore. If you uninstall MouseForge, restore the number keys first. Quit SteelSeries GG too: it also writes to the mouse.</p>
+    </div>
+    <div class="card">
+      <h2>Button tester</h2>
+      <p class="hint">Focus this window and press buttons. Buttons that are already remapped are handled by MouseForge before they reach this window, so they don't light up here.</p>
+      <div class="tester" id="tester"></div>
+      <div class="muted" id="tester-last">Last input: none</div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
