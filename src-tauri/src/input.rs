@@ -84,8 +84,16 @@ impl Engine {
     /// Replace the config (from the settings UI) and re-evaluate profile + DPI.
     pub fn set_config(&self, cfg: Config) {
         let polling = cfg.polling_rate;
-        *self.config.write().unwrap() = cfg;
+        let (lighting, power) = (cfg.lighting.clone(), cfg.power.clone());
+        let old = std::mem::replace(&mut *self.config.write().unwrap(), cfg);
         let _ = self.device.send(DeviceCmd::PollingRate(polling));
+        if old.lighting != lighting {
+            let _ = self.device.send(DeviceCmd::SetLighting(lighting));
+        }
+        // Power settings are saved to the mouse's memory, so only write real changes.
+        if old.power != power {
+            let _ = self.device.send(DeviceCmd::SetPower(power));
+        }
         let fg = self.foreground.lock().unwrap().clone();
         self.select_profile(&fg, true);
     }

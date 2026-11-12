@@ -26,8 +26,8 @@ These notes cover what MouseForge uses. The DPI, polling rate, battery and save 
 | `0x21` | `count, (zone, r, g, b) × count` | **Lighting colour**: zones 0, 1, 2. GG sends `01 zone r g b` for one zone, or `03` with all three. Takes effect immediately and isn't saved. |
 | `0x22` | `ff` | Onboard rainbow effect (rivalcfg) |
 | `0x23` | `0f 01 01 00, ms (3 bytes LE)` | **Lighting dim timer** (GG: 30 s = `30 75 00`, 7 min = `a0 68 06`) |
-| `0x26` | `01 00 r g b` | **Reactive (on-click) colour**, as sent by GG |
-| `0x27` | `01` | Lighting at power-on (GG sends `01` with its default rainbow) |
+| `0x26` | `01 00 r g b`, or `00 00 00 00 00` for off | **Click flash (reactive lighting)**, done by the mouse itself. It overlays streamed colours and is kept after a save. |
+| `0x27` | `01 00` = rainbow, `00 00` = off | Lighting at power-on and whenever nothing is streaming colours (needs a save) |
 | `0x28` | `00` | Unknown; GG sends it at startup |
 | `0x29` | `ms (3 bytes LE)` | **Sleep timer** (5 min = `e0 93 04`, 10 min = `c0 27 09`) |
 | `0x90` | `00` | Version query, **without** the `0x40` flag. Reply is ASCII with no echo byte: `31 2e 32 2e 34` = "1.2.4". GG also sends `0xD0`. |
@@ -37,7 +37,7 @@ These notes cover what MouseForge uses. The DPI, polling rate, battery and save 
 
 Seen in captures; these never reach the mouse as settings:
 
-- **Lighting effects** (static, breathe, colour shift, reactive flashes): Prism renders every frame on the PC and streams `0x21` colour frames at about 20 per second. An app that wants effects has to animate them itself.
+- **Lighting effects** (static, breathe, colour shift): Prism renders every frame on the PC and streams `0x21` colour frames at about 20 per second. An app that wants effects has to animate them itself.
 - **Angle snapping, acceleration/deceleration**: toggling them sends no command, so they're PC-side filters.
 
 ## Startup sequence

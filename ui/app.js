@@ -454,6 +454,84 @@ $("#save-mouse").addEventListener("click", async () => {
   toast("Saved to the mouse's onboard memory");
 });
 
+// ------------------------------------------------------------------ lighting
+
+const LIGHT_MODES = [
+  ["off", "Off", "Lights off while MouseForge is running."],
+  ["static", "Static", "A fixed colour for each zone."],
+  ["breathe", "Breathe", "The zone colours slowly fade in and out."],
+  ["color_shift", "Colour shift", "Cycles through the rainbow, flowing down the mouse."],
+  ["onboard_rainbow", "Mouse's own rainbow", "The mouse's built-in rainbow. It keeps running even when MouseForge is closed."],
+];
+const ZONE_NAMES = ["Top", "Middle", "Bottom"];
+
+function renderLighting() {
+  const l = cfg.lighting;
+  $("#light-mode").replaceChildren(...LIGHT_MODES.map(([id, label]) =>
+    el("button", { className: l.mode === id ? "on" : "", textContent: label, onclick: () => { l.mode = id; scheduleSave(); renderLighting(); } })));
+  $("#light-mode-hint").textContent = LIGHT_MODES.find((m) => m[0] === l.mode)?.[2] ?? "";
+
+  const usesColours = l.mode === "static" || l.mode === "breathe";
+  $("#light-colours-card").classList.toggle("disabled", !usesColours);
+  $("#zone-pickers").replaceChildren(...l.zones.map((c, i) =>
+    el("label", {}, el("span", { textContent: ZONE_NAMES[i] }),
+      el("input", { type: "color", value: c, oninput: (e) => { l.zones[i] = e.target.value; scheduleSave(); paintPreview(); } }))));
+
+  $("#light-bright").value = l.brightness;
+  $("#light-bright-val").textContent = `${l.brightness}%`;
+  $("#light-speed").value = l.speed_secs;
+  $("#light-speed-val").textContent = `${l.speed_secs} s`;
+  $("#light-speed-row").style.display = l.mode === "breathe" || l.mode === "color_shift" ? "" : "none";
+  $("#light-reactive").checked = !!l.reactive;
+  $("#light-reactive-colour").value = l.reactive ?? "#ffffff";
+  $("#light-reactive-colour").disabled = !l.reactive;
+
+  $("#light-idle").replaceChildren(...[["rainbow", "Rainbow"], ["off", "Lights off"]].map(([id, label]) =>
+    el("button", { className: l.idle === id ? "on" : "", textContent: label, onclick: () => { l.idle = id; scheduleSave(); renderLighting(); } })));
+  paintPreview();
+}
+
+function paintPreview() {
+  const l = cfg.lighting;
+  const k = l.brightness / 100;
+  l.zones.forEach((c, i) => {
+    const z = $(`#mp-${i}`);
+    const on = l.mode === "static" || l.mode === "breathe";
+    const rainbow = l.mode === "color_shift" || l.mode === "onboard_rainbow";
+    z.style.background = rainbow ? "linear-gradient(#ff3b3b, #ffd23b, #3bff6e, #3bb8ff, #b43bff)" : on ? c : "transparent";
+    z.style.opacity = on || rainbow ? Math.max(0.15, k) : 1;
+    z.style.boxShadow = on ? `0 0 ${14 * k}px ${c}` : "none";
+    z.style.animation = l.mode === "breathe" ? `mf-breathe ${l.speed_secs}s ease-in-out infinite`
+      : rainbow ? `mf-hue ${l.mode === "color_shift" ? l.speed_secs : 6}s linear infinite` : "none";
+  });
+}
+
+$("#light-bright").addEventListener("input", (e) => { cfg.lighting.brightness = +e.target.value; $("#light-bright-val").textContent = `${e.target.value}%`; scheduleSave(); paintPreview(); });
+$("#light-speed").addEventListener("input", (e) => { cfg.lighting.speed_secs = +e.target.value; $("#light-speed-val").textContent = `${e.target.value} s`; scheduleSave(); paintPreview(); });
+$("#light-reactive").addEventListener("change", (e) => { cfg.lighting.reactive = e.target.checked ? $("#light-reactive-colour").value : null; scheduleSave(); renderLighting(); });
+for (const ev of ["input", "change"]) {
+  $("#light-reactive-colour").addEventListener(ev, (e) => { if (cfg.lighting.reactive) { cfg.lighting.reactive = e.target.value; scheduleSave(); } });
+}
+$("#light-same").addEventListener("click", () => { const l = cfg.lighting; l.zones = [l.zones[0], l.zones[0], l.zones[0]]; scheduleSave(); renderLighting(); });
+
+// ------------------------------------------------------------------ power
+
+const SLEEP_OPTIONS = [1, 2, 3, 5, 10, 15, 20].map((m) => [m, `${m} minute${m > 1 ? "s" : ""}`]);
+const DIM_OPTIONS = [[5, "5 seconds"], [10, "10 seconds"], [15, "15 seconds"], [30, "30 seconds"], [60, "1 minute"], [120, "2 minutes"], [300, "5 minutes"], [600, "10 minutes"], [1200, "20 minutes"]];
+
+function renderPower() {
+  const p = cfg.power;
+  const fill = (sel, opts, val, unit) => {
+    const list = opts.some(([v]) => v === val) ? opts : [...opts, [val, `${val} ${unit}`]].sort((a, b) => a[0] - b[0]);
+    sel.replaceChildren(...list.map(([v, l]) => el("option", { value: v, textContent: l })));
+    sel.value = String(val);
+  };
+  fill($("#sleep-min"), SLEEP_OPTIONS, p.sleep_minutes, "minutes");
+  fill($("#dim-sec"), DIM_OPTIONS, p.dim_seconds, "seconds");
+}
+$("#sleep-min").addEventListener("change", (e) => { cfg.power.sleep_minutes = +e.target.value; scheduleSave(); toast("Sleep timer saved to the mouse"); });
+$("#dim-sec").addEventListener("change", (e) => { cfg.power.dim_seconds = +e.target.value; scheduleSave(); toast("Dim timer saved to the mouse"); });
+
 // ------------------------------------------------------------------ battery
 
 function renderBattery() {
@@ -523,6 +601,8 @@ window.addEventListener("mouseup", (e) => { if (e.button === 3 || e.button === 4
   for (const p of cfg.profiles) p.bindings ??= {};
   renderProfile();
   renderBattery();
+  renderLighting();
+  renderPower();
   updateStatus(await invoke("get_status"));
   $("#autostart").checked = await invoke("get_autostart");
   loadRunningApps();

@@ -22,7 +22,8 @@
 <nav class="tabs" role="tablist">
   <button role="tab" data-tab="buttons" class="active">Buttons &amp; profiles</button>
   <button role="tab" data-tab="dpi">DPI</button>
-  <button role="tab" data-tab="battery">Battery</button>
+  <button role="tab" data-tab="lighting">Lighting</button>
+  <button role="tab" data-tab="battery">Battery &amp; power</button>
   <button role="tab" data-tab="setup">Setup</button>
   <span class="save-state" id="save-state"></span>
 </nav>
@@ -98,6 +99,44 @@
     </div>
   </section>
 
+  <!-- LIGHTING -->
+  <section class="tab-panel" id="tab-lighting">
+    <div class="card">
+      <h2>Effect</h2>
+      <div class="seg" id="light-mode"></div>
+      <p class="hint" id="light-mode-hint" style="margin-top:10px"></p>
+    </div>
+    <div class="card" id="light-colours-card">
+      <div class="card-head">
+        <h2>Colours</h2>
+        <button class="btn small" id="light-same">Use top colour everywhere</button>
+      </div>
+      <div class="zones">
+        <div class="mouse-preview" aria-hidden="true">
+          <div class="mp-zone" id="mp-0"></div>
+          <div class="mp-zone" id="mp-1"></div>
+          <div class="mp-zone" id="mp-2"></div>
+        </div>
+        <div class="zone-pickers" id="zone-pickers"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Adjust</h2>
+      <label class="field"><span>Brightness <strong id="light-bright-val"></strong></span>
+        <input type="range" id="light-bright" min="0" max="100" step="5"></label>
+      <label class="field" id="light-speed-row" style="margin-top:12px"><span>Speed: one cycle every <strong id="light-speed-val"></strong></span>
+        <input type="range" id="light-speed" min="0.5" max="15" step="0.5"></label>
+      <label class="check"><input type="checkbox" id="light-reactive"> Flash when I click
+        <input type="color" id="light-reactive-colour" value="#ffffff" title="Flash colour"></label>
+      <p class="hint">The flash is done by the mouse itself, so it also works when MouseForge is closed.</p>
+    </div>
+    <div class="card">
+      <h2>When MouseForge isn't running</h2>
+      <p class="hint">Effects are drawn by MouseForge, the same way SteelSeries GG does it. When the app is closed, or right after the mouse powers on, the mouse shows its own lighting:</p>
+      <div class="seg" id="light-idle"></div>
+    </div>
+  </section>
+
   <!-- BATTERY -->
   <section class="tab-panel" id="tab-battery">
     <div class="card battery-hero">
@@ -121,6 +160,16 @@
         <select id="poll-secs"><option value="30">30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option><option value="900">15 minutes</option></select>
       </label>
       <button class="btn ghost" id="test-notify">Send a test notification</button>
+    </div>
+    <div class="card">
+      <h2>Power saving</h2>
+      <p class="hint">Saved in the mouse itself, so these work even when MouseForge isn't running.</p>
+      <label class="field inline"><span>Sleep after</span>
+        <select id="sleep-min"></select>
+      </label>
+      <label class="field inline"><span>Dim the lights after</span>
+        <select id="dim-sec"></select>
+      </label>
     </div>
   </section>
 

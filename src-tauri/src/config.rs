@@ -104,6 +104,79 @@ impl Default for BatteryConfig {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LightMode {
+    Off,
+    #[default]
+    Static,
+    Breathe,
+    ColorShift,
+    /// The mouse's own rainbow effect (runs without MouseForge streaming frames).
+    OnboardRainbow,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum IdleLighting {
+    /// Lighting the mouse uses at power-on / when MouseForge isn't running.
+    #[default]
+    Rainbow,
+    Off,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LightingConfig {
+    pub mode: LightMode,
+    /// Top, middle, bottom zone colours as "#rrggbb".
+    pub zones: [String; 3],
+    /// 0..=100
+    pub brightness: u8,
+    /// Seconds per breathe / colour-shift cycle.
+    pub speed_secs: f32,
+    /// Flash this colour on left/right click (software "reactive" lighting).
+    #[serde(default)]
+    pub reactive: Option<String>,
+    #[serde(default)]
+    pub idle: IdleLighting,
+}
+
+impl Default for LightingConfig {
+    fn default() -> Self {
+        Self {
+            mode: LightMode::Static,
+            zones: ["#ff3c1e".into(), "#ff3c1e".into(), "#ff3c1e".into()],
+            brightness: 100,
+            speed_secs: 4.0,
+            reactive: None,
+            idle: IdleLighting::Rainbow,
+        }
+    }
+}
+
+pub fn parse_hex(s: &str) -> [u8; 3] {
+    let h = s.trim().trim_start_matches('#');
+    if h.len() != 6 {
+        return [0, 0, 0];
+    }
+    let c = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(0);
+    [c(0), c(2), c(4)]
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct PowerConfig {
+    /// Minutes of inactivity before the mouse sleeps (1..=20).
+    pub sleep_minutes: u32,
+    /// Seconds of inactivity before the lights dim (5..=1200).
+    pub dim_seconds: u32,
+}
+
+impl Default for PowerConfig {
+    fn default() -> Self {
+        Self { sleep_minutes: 5, dim_seconds: 30 }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
     #[serde(default)]
@@ -114,6 +187,10 @@ pub struct Config {
     pub profiles: Vec<Profile>,
     #[serde(default)]
     pub battery: BatteryConfig,
+    #[serde(default)]
+    pub lighting: LightingConfig,
+    #[serde(default)]
+    pub power: PowerConfig,
 }
 
 fn default_polling() -> u32 {
@@ -132,6 +209,8 @@ impl Default for Config {
                 dpi: None,
             }],
             battery: BatteryConfig::default(),
+            lighting: LightingConfig::default(),
+            power: PowerConfig::default(),
         }
     }
 }
@@ -181,6 +260,15 @@ impl Config {
             self.polling_rate = 1000;
         }
         self.battery.poll_secs = self.battery.poll_secs.clamp(15, 3600);
+        let l = &mut self.lighting;
+        l.brightness = l.brightness.min(100);
+        l.speed_secs = if l.speed_secs.is_finite() { l.speed_secs.clamp(0.5, 30.0) } else { 4.0 };
+        for z in &mut l.zones {
+            let [r, g, b] = parse_hex(z);
+            *z = format!("#{r:02x}{g:02x}{b:02x}");
+        }
+        self.power.sleep_minutes = self.power.sleep_minutes.clamp(1, 20);
+        self.power.dim_seconds = self.power.dim_seconds.clamp(5, 1200);
     }
 
     /// Profile index for a foreground executable name (lowercase).

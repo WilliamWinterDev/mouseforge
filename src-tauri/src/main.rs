@@ -4,6 +4,7 @@ mod actions;
 mod config;
 mod device;
 mod input;
+mod lighting;
 
 use config::{Config, DpiConfig};
 use device::{DeviceCmd, DeviceStatus};
@@ -278,7 +279,7 @@ fn main() {
             // Device + input engine
             let cfg = Config::load();
             let h = handle.clone();
-            let device = device::spawn(cfg.battery.poll_secs, cfg.dpi_for(0), cfg.polling_rate, move |s| on_device_status(&h, s));
+            let device = device::spawn(cfg.battery.poll_secs, cfg.dpi_for(0), cfg.polling_rate, cfg.lighting.clone(), move |s| on_device_status(&h, s));
             let h = handle.clone();
             input::start(cfg, device, move || refresh(&h));
 

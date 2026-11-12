@@ -5,7 +5,8 @@
 //! command byte is OR-ed with 0x40 and the mouse echoes it back as the first
 //! byte of its reply.
 
-use crate::config::DpiConfig;
+use crate::config::{DpiConfig, IdleLighting, LightMode, LightingConfig, PowerConfig};
+use crate::lighting::{self, Frame};
 use hidapi::{HidApi, HidDevice};
 use serde::Serialize;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -91,6 +92,52 @@ pub enum DeviceCmd {
     SaveToMouse,
     RefreshBattery,
     SetPollSecs(u64),
+    /// New lighting settings (effect, colours, idle lighting).
+    SetLighting(LightingConfig),
+    /// Sleep and dim timers; written and saved to the mouse.
+    SetPower(PowerConfig),
+}
+
+const CMD_LIGHT: u8 = 0x21;
+const CMD_ONBOARD_RAINBOW: u8 = 0x22;
+const CMD_DIM_TIMER: u8 = 0x23;
+const CMD_REACTIVE: u8 = 0x26;
+const CMD_IDLE_LIGHTING: u8 = 0x27;
+const CMD_SLEEP_TIMER: u8 = 0x29;
+/// ~25 frames per second for animated effects.
+const FRAME_INTERVAL: Duration = Duration::from_millis(40);
+
+fn le24(v: u32) -> [u8; 3] {
+    let b = v.to_le_bytes();
+    [b[0], b[1], b[2]]
+}
+
+fn write_frame(d: &Open, f: &Frame) -> hidapi::HidResult<Option<[u8; 64]>> {
+    let mut p = vec![3u8];
+    for (zone, rgb) in f.iter().enumerate() {
+        p.push(zone as u8);
+        p.extend_from_slice(rgb);
+    }
+    d.send(CMD_LIGHT, &p)
+}
+
+fn write_power(d: &Open, p: &PowerConfig) -> hidapi::HidResult<()> {
+    d.send(CMD_SLEEP_TIMER, &le24(p.sleep_minutes * 60_000))?;
+    let mut dim = vec![0x0F, 0x01, 0x01, 0x00];
+    dim.extend_from_slice(&le24(p.dim_seconds * 1000));
+    d.send(CMD_DIM_TIMER, &dim)?;
+    d.send(CMD_SAVE, &[0x00])?;
+    Ok(())
+}
+
+fn write_idle_lighting(d: &Open, idle: IdleLighting) -> hidapi::HidResult<()> {
+    let v: [u8; 2] = match idle {
+        IdleLighting::Rainbow => [0x01, 0x00],
+        IdleLighting::Off => [0x00, 0x00],
+    };
+    d.send(CMD_IDLE_LIGHTING, &v)?;
+    d.send(CMD_SAVE, &[0x00])?;
+    Ok(())
 }
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
@@ -164,16 +211,32 @@ fn open(api: &mut HidApi) -> Option<Open> {
 }
 
 /// Start the device thread. `on_status` is called whenever the status changes.
-pub fn spawn(poll_secs: u64, initial: DpiConfig, polling_rate: u32, on_status: impl Fn(DeviceStatus) + Send + 'static) -> Sender<DeviceCmd> {
+pub fn spawn(
+    poll_secs: u64,
+    initial: DpiConfig,
+    polling_rate: u32,
+    lighting: LightingConfig,
+    on_status: impl Fn(DeviceStatus) + Send + 'static,
+) -> Sender<DeviceCmd> {
     let (tx, rx) = mpsc::channel();
     std::thread::Builder::new()
         .name("device".into())
-        .spawn(move || run(rx, poll_secs, initial, polling_rate, on_status))
+        .spawn(move || run(rx, poll_secs, initial, polling_rate, lighting, on_status))
         .expect("spawn device thread");
     tx
 }
 
-fn run(rx: Receiver<DeviceCmd>, mut poll_secs: u64, mut dpi: DpiConfig, mut polling_rate: u32, on_status: impl Fn(DeviceStatus)) {
+fn run(
+    rx: Receiver<DeviceCmd>,
+    mut poll_secs: u64,
+    mut dpi: DpiConfig,
+    mut polling_rate: u32,
+    mut light: LightingConfig,
+    on_status: impl Fn(DeviceStatus),
+) {
+    let t0 = Instant::now();
+    let mut light_dirty = true;
+    let mut next_frame = Instant::now();
     let mut api = match HidApi::new() {
         Ok(a) => a,
         Err(e) => {
@@ -195,7 +258,11 @@ fn run(rx: Receiver<DeviceCmd>, mut poll_secs: u64, mut dpi: DpiConfig, mut poll
             }
         }
 
-        let wait = next_poll.saturating_duration_since(Instant::now());
+        let streaming = dev.is_some() && status.awake && lighting::animated(&light);
+        let mut wait = next_poll.saturating_duration_since(Instant::now());
+        if streaming {
+            wait = wait.min(next_frame.saturating_duration_since(Instant::now()));
+        }
         let cmd = match rx.recv_timeout(wait) {
             Ok(c) => Some(c),
             Err(RecvTimeoutError::Timeout) => None,
@@ -239,6 +306,28 @@ fn run(rx: Receiver<DeviceCmd>, mut poll_secs: u64, mut dpi: DpiConfig, mut poll
             Some(DeviceCmd::SaveToMouse) => {
                 if let Some(d) = &dev {
                     let _ = d.send(CMD_SAVE, &[0x00]);
+                }
+            }
+            Some(DeviceCmd::SetLighting(l)) => {
+                if let Some(d) = &dev {
+                    if l.idle != light.idle {
+                        let res = write_idle_lighting(d, l.idle);
+                        eprintln!("[device] idle lighting {:?} -> {res:?}", l.idle);
+                    }
+                    // The click flash is done by the mouse; save it so it also
+                    // applies when MouseForge isn't running.
+                    if l.reactive != light.reactive {
+                        let res = d.send(CMD_REACTIVE, &lighting::reactive_payload(&l)).and_then(|_| d.send(CMD_SAVE, &[0x00]));
+                        eprintln!("[device] reactive {:?} -> {:?}", l.reactive, res.map(|r| r.is_some()));
+                    }
+                }
+                light = l;
+                light_dirty = true;
+            }
+            Some(DeviceCmd::SetPower(p)) => {
+                if let Some(d) = &dev {
+                    let res = write_power(d, &p);
+                    eprintln!("[device] power {p:?} -> {res:?}");
                 }
             }
             Some(DeviceCmd::RefreshBattery) => next_poll = Instant::now(),
@@ -287,6 +376,7 @@ fn run(rx: Receiver<DeviceCmd>, mut poll_secs: u64, mut dpi: DpiConfig, mut poll
                             let _ = d.send(CMD_POLLING, &[polling_code(polling_rate)]);
                             std::thread::sleep(Duration::from_millis(150));
                             push_dpi = true;
+                            light_dirty = true;
                         }
                     }
                 },
@@ -306,6 +396,35 @@ fn run(rx: Receiver<DeviceCmd>, mut poll_secs: u64, mut dpi: DpiConfig, mut poll
                 if res.is_ok() {
                     new.live_dpi = Some(presets[active.min(presets.len() - 1)]);
                 } else {
+                    dev = None;
+                    new = DeviceStatus::default();
+                }
+            }
+        }
+
+        // Lighting: stream frames for animated effects, and write static
+        // colours once (again whenever the mouse wakes up).
+        if new.awake {
+            if let Some(d) = &dev {
+                let animate = lighting::animated(&light);
+                let due = Instant::now() >= next_frame;
+                let mut res = if light.mode == LightMode::OnboardRainbow {
+                    if light_dirty { d.send(CMD_ONBOARD_RAINBOW, &[0xFF]).map(|_| ()) } else { Ok(()) }
+                } else if light_dirty || (animate && due) {
+                    let frame = lighting::render(&light, t0.elapsed().as_secs_f32());
+                    write_frame(d, &frame).map(|_| ())
+                } else {
+                    Ok(())
+                };
+                if light_dirty && res.is_ok() {
+                    // Keep the mouse's click flash in sync (e.g. after it wakes up).
+                    res = d.send(CMD_REACTIVE, &lighting::reactive_payload(&light)).map(|_| ());
+                }
+                if animate && due {
+                    next_frame = Instant::now() + FRAME_INTERVAL;
+                }
+                light_dirty = false;
+                if res.is_err() {
                     dev = None;
                     new = DeviceStatus::default();
                 }

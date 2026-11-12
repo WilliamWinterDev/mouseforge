@@ -13,6 +13,8 @@ A small, fast Windows tray app for the **SteelSeries Aerox 9 Wireless**, built t
   - DPI next / previous / set / hold-to-snipe
   - macros, opening apps or URLs, or typing text
 - **Per-app profiles:** switch automatically when an app (by `.exe`) is focused. Buttons a profile leaves unset use the Default profile's binding.
+- **RGB lighting:** colours for the three zones, brightness, breathe and colour-shift effects, the mouse's own rainbow, a click flash in any colour, and the lighting to use when MouseForge isn't running.
+- **Power saving:** sleep and lighting-dim timers, saved on the mouse.
 - **Battery:** shown in the tray, with Windows notifications at the levels you choose and when fully charged.
 - **No GG needed:** MouseForge sets the side panel itself (see [docs/PROTOCOL.md](docs/PROTOCOL.md)).
 
@@ -62,6 +64,7 @@ The output is `src-tauri/target/release/mouseforge.exe`. If linking fails with `
 | [`device.rs`](src-tauri/src/device.rs) | HID protocol on its own thread, with reconnects, battery polling, DPI and button table writes |
 | [`input.rs`](src-tauri/src/input.rs) | Low-level mouse and keyboard hooks (wheel click, F13–F24), foreground-app tracking, and action dispatch |
 | [`actions.rs`](src-tauri/src/actions.rs) | `SendInput` for keys, mouse buttons, media keys, macros and text |
+| [`lighting.rs`](src-tauri/src/lighting.rs) | Lighting effects rendered on the PC and streamed to the mouse, and the mouse's own click flash |
 | [`config.rs`](src-tauri/src/config.rs) | Profiles and bindings, stored as JSON |
 | [`main.rs`](src-tauri/src/main.rs) | Tauri app, tray icon, notifications and the commands the UI calls |
 
@@ -71,12 +74,12 @@ Global input hooks are the standard Windows way to remap input, but some anti-ch
 
 Planned, roughly in order. No promises on dates.
 
-- [ ] **RGB lighting:** colours for the three zones, a reactive click colour, rainbow mode, and the default effect at power-on. The commands are already known from rivalcfg.
+- [x] **RGB lighting:** zone colours, brightness, breathe, colour shift, click flash, and idle lighting.
 - [ ] **More DPI control**
   - an on-screen DPI indicator when you switch presets
   - follow the mouse's own DPI button, so the app always shows the active preset
   - a DPI preview/test area on the DPI tab
-- [ ] **Power settings:** sleep timer and lighting dim timer.
+- [x] **Power settings:** sleep timer and lighting dim timer.
 - [ ] **Remap the DPI button:** needs the rest of the button table decoded (see [docs/PROTOCOL.md](docs/PROTOCOL.md)).
 - [ ] **Releases:** prebuilt downloads and an installer on GitHub Releases, so you don't need to build from source.
 - [ ] **Testing in wired (USB cable) mode** and on the WOW Edition.
