@@ -240,7 +240,7 @@ fn run(
     let mut api = match HidApi::new() {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("hidapi init failed: {e}");
+            crate::applog::log(format!("hidapi init failed: {e}"));
             return;
         }
     };
@@ -288,7 +288,7 @@ fn run(
                     polling_rate = hz;
                     if let Some(d) = &dev {
                         let res = d.send(CMD_POLLING, &[polling_code(hz)]);
-                        eprintln!("[device] polling {hz} -> {:02x?}", res.as_ref().map(|r| r.map(|b| [b[0], b[1]])));
+                        crate::applog::log(format!("[device] polling {hz} -> {:02x?}", res.as_ref().map(|r| r.map(|b| [b[0], b[1]]))));
                         std::thread::sleep(Duration::from_millis(150));
                         push_dpi = true;
                     }
@@ -300,7 +300,7 @@ fn run(
                     Some(_) if !status.awake => Err("The mouse is asleep. Move it and try again.".to_string()),
                     Some(d) => write_buttons(d, mode),
                 };
-                eprintln!("[device] side keys {mode:?} -> {result:?}");
+                crate::applog::log(format!("[device] side keys {mode:?} -> {result:?}"));
                 let _ = reply.send(result);
             }
             Some(DeviceCmd::SaveToMouse) => {
@@ -312,13 +312,13 @@ fn run(
                 if let Some(d) = &dev {
                     if l.idle != light.idle {
                         let res = write_idle_lighting(d, l.idle);
-                        eprintln!("[device] idle lighting {:?} -> {res:?}", l.idle);
+                        crate::applog::log(format!("[device] idle lighting {:?} -> {res:?}", l.idle));
                     }
                     // The click flash is done by the mouse; save it so it also
                     // applies when MouseForge isn't running.
                     if l.reactive != light.reactive {
                         let res = d.send(CMD_REACTIVE, &lighting::reactive_payload(&l)).and_then(|_| d.send(CMD_SAVE, &[0x00]));
-                        eprintln!("[device] reactive {:?} -> {:?}", l.reactive, res.map(|r| r.is_some()));
+                        crate::applog::log(format!("[device] reactive {:?} -> {:?}", l.reactive, res.map(|r| r.is_some())));
                     }
                 }
                 light = l;
@@ -327,7 +327,7 @@ fn run(
             Some(DeviceCmd::SetPower(p)) => {
                 if let Some(d) = &dev {
                     let res = write_power(d, &p);
-                    eprintln!("[device] power {p:?} -> {res:?}");
+                    crate::applog::log(format!("[device] power {p:?} -> {res:?}"));
                 }
             }
             Some(DeviceCmd::RefreshBattery) => next_poll = Instant::now(),
@@ -392,7 +392,7 @@ fn run(
                 let mut payload = vec![presets.len() as u8, active as u8];
                 payload.extend(presets.iter().map(|&p| dpi_code(p)));
                 let res = d.send(CMD_DPI, &payload);
-                eprintln!("[device] dpi {presets:?} active={active} -> {:02x?}", res.as_ref().map(|r| r.map(|b| [b[0], b[1], b[2]])));
+                crate::applog::log(format!("[device] dpi {presets:?} active={active} -> {:02x?}", res.as_ref().map(|r| r.map(|b| [b[0], b[1], b[2]]))));
                 if res.is_ok() {
                     new.live_dpi = Some(presets[active.min(presets.len() - 1)]);
                 } else {

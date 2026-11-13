@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod actions;
+mod applog;
 mod config;
 mod device;
 mod input;
@@ -80,7 +81,7 @@ fn refresh(app: &AppHandle) {
 
 fn notify(app: &AppHandle, title: &str, body: &str) {
     if let Err(e) = app.notification().builder().title(title).body(body).show() {
-        eprintln!("[notify] failed: {e}");
+        crate::applog::log(format!("[notify] failed: {e}"));
     }
 }
 
@@ -103,7 +104,7 @@ fn register_toast_identity(identifier: &str) {
             RegSetKeyValueW(HKEY_CURRENT_USER, key_path.as_ptr(), n.as_ptr(), REG_SZ, v.as_ptr() as *const _, (v.len() * 2) as u32)
         };
         if rc != 0 {
-            eprintln!("[notify] couldn't register {name}: {rc}");
+            crate::applog::log(format!("[notify] couldn't register {name}: {rc}"));
         }
     }
 }
@@ -154,7 +155,7 @@ fn get_config() -> Config {
 fn save_config(app: AppHandle, config: Config) -> Result<Config, String> {
     let mut config = config;
     config.sanitize();
-    eprintln!("[ui] save_config dpi={:?}", config.dpi);
+    crate::applog::log(format!("[ui] save_config dpi={:?}", config.dpi));
     config.save().map_err(|e| format!("Couldn't save settings: {e}"))?;
     let e = input::engine();
     let _ = e.device.send(DeviceCmd::SetPollSecs(config.battery.poll_secs));
@@ -222,7 +223,13 @@ fn show_main(app: &AppHandle) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    applog::install_panic_hook();
+    applog::log(format!(
+        "MouseForge {} starting, args: {:?}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::args().skip(1).collect::<Vec<_>>()
+    ));
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
@@ -252,22 +259,27 @@ fn main() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
             let menu = Menu::with_items(app, &[&tray_battery, &tray_profile, &sep, &open, &quit])?;
-            TrayIconBuilder::with_id("main")
-                .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("MouseForge")
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "open" => show_main(app),
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                        show_main(tray.app_handle());
+            // At login Windows can start us before the taskbar exists, and then
+            // the tray icon can't be created yet. Never let that stop the app:
+            // keep retrying in the background instead.
+            if let Err(e) = build_tray(&handle, &menu) {
+                applog::log(format!("tray icon not ready ({e}); retrying in the background"));
+                let (h, menu) = (handle.clone(), menu.clone());
+                std::thread::spawn(move || {
+                    for attempt in 1..=90 {
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        match build_tray(&h, &menu) {
+                            Ok(()) => {
+                                applog::log(format!("tray icon created after {attempt} retries"));
+                                refresh(&h);
+                                return;
+                            }
+                            Err(e) if attempt == 90 => applog::log(format!("giving up on the tray icon: {e}")),
+                            Err(_) => {}
+                        }
                     }
-                })
-                .build(app)?;
+                });
+            }
 
             app.manage(AppState {
                 device: Mutex::new(DeviceStatus::default()),
@@ -296,8 +308,35 @@ fn main() {
             if !std::env::args().any(|a| a == "--minimized") {
                 show_main(&handle);
             }
+            applog::log("started");
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running MouseForge");
+        .run(tauri::generate_context!());
+    if let Err(e) = result {
+        applog::log(format!("MouseForge stopped with an error: {e}"));
+        std::process::exit(1);
+    }
+}
+
+fn build_tray(app: &AppHandle, menu: &Menu<tauri::Wry>) -> tauri::Result<()> {
+    TrayIconBuilder::with_id("main")
+        .icon(app.default_window_icon().cloned().ok_or(tauri::Error::InvalidIcon(std::io::Error::other("no icon")))?)
+        .tooltip("MouseForge")
+        .menu(menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main(app),
+            "quit" => {
+                applog::log("quit from tray");
+                app.exit(0)
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
 }
