@@ -2,7 +2,7 @@
 #   - copies the release build to %LOCALAPPDATA%\Programs\MouseForge
 #   - creates a Start Menu shortcut carrying the app's AppUserModelID,
 #     which Windows requires before it will show the app's notifications
-#   - registers "start with Windows" (minimised to the tray)
+#   - registers "start with Windows" (minimised to the tray) as a logon task
 # Usage: powershell -ExecutionPolicy Bypass -File install.ps1 [path\to\mouseforge.exe]
 param([string]$Source = "$PSScriptRoot\src-tauri\target\release\mouseforge.exe")
 
@@ -72,7 +72,20 @@ public static class AumidShortcut {
 $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\MouseForge.lnk'
 [AumidShortcut]::Create($lnk, $exe, $AppId)
 
-Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'MouseForge' -Value "`"$exe`" --minimized"
-Start-Process $exe
+# Start with Windows: a logon task rather than a Run entry, which some Windows 11
+# builds skip. Normal priority (4) so the input hooks don't lag; no time limit.
+Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'MouseForge' -ErrorAction SilentlyContinue
+$user = "$env:USERDOMAIN\$env:USERNAME"
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -Priority 4
+Register-ScheduledTask -TaskName 'MouseForge' -Force `
+    -Action (New-ScheduledTaskAction -Execute $exe -Argument '--minimized') `
+    -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $user) `
+    -Principal (New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited) `
+    -Settings $settings | Out-Null
+# Launch through the task, not Start-Process: if this script runs inside a packaged
+# (MSIX) app's terminal, a child process would inherit its sandbox, and its
+# %APPDATA% (config, log) would be redirected to a private copy.
+Start-ScheduledTask -TaskName 'MouseForge'
 "Installed $exe"
 "Shortcut  $lnk"

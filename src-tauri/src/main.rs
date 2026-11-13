@@ -2,6 +2,7 @@
 
 mod actions;
 mod applog;
+mod autostart;
 mod config;
 mod device;
 mod input;
@@ -15,7 +16,6 @@ use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
-use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_notification::NotificationExt;
 
 #[derive(Default)]
@@ -204,14 +204,13 @@ fn test_notification(app: AppHandle) {
 }
 
 #[tauri::command]
-fn get_autostart(app: AppHandle) -> bool {
-    app.autolaunch().is_enabled().unwrap_or(false)
+fn get_autostart() -> bool {
+    autostart::is_enabled()
 }
 
 #[tauri::command]
-fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let al = app.autolaunch();
-    if enabled { al.enable() } else { al.disable() }.map_err(|e| e.to_string())
+fn set_autostart(enabled: bool) -> Result<(), String> {
+    autostart::set_enabled(enabled)
 }
 
 fn show_main(app: &AppHandle) {
@@ -232,10 +231,6 @@ fn main() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--minimized"]),
-        ))
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
@@ -249,6 +244,7 @@ fn main() {
             set_autostart
         ])
         .setup(|app| {
+            std::thread::spawn(autostart::migrate);
             let handle = app.handle().clone();
             register_toast_identity(&app.config().identifier);
 
